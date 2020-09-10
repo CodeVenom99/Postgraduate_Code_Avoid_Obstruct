@@ -1,7 +1,9 @@
-/*在最原始的人工势场之上，
-解决目标不可达，但是效果不明显
-但是避障速度不够快
-勉强实现多机器人避障
+/*在CFM.c之上，
+针对避障速度缓慢（特别是对于墙的避障）参考论文，
+依据引力和斥力夹角，如果是钝角将斥力向引力方向旋转90度后计算合力，如果是锐角就不动。
+论文中说的好处是解决局部最小值，其实还能解决避障速度缓慢
+但是这样的处理过于粗暴，有一定的改善但是不够从好，不好在对于墙的避障，不能选择较好的转向
+（主要因为没有考虑到墙的大小，不是根据障碍大小决定朝哪转，而是通过与引力的夹角决定朝哪转，这是错误的）
  */
 #include <math.h>
 #include <stdio.h>
@@ -19,11 +21,11 @@
 //打印车辆信息的预条件编译
 #define car_info_printf 1
 //打印障碍信息的预条件编译
-#define obstruct_info_printf 1
+#define obstruct_info_printf 0
 
 #define PI (4*atan(1))
-#define Max_speed 0.0
-#define TURN_COEFFICIENT 5.0
+#define Max_speed 15.0
+#define TURN_COEFFICIENT 15.0
 #define Sensor_Data_Num 90//是90不是60是因为方便找波谷
 
 WbDeviceTag wheels[4];
@@ -413,9 +415,82 @@ void Compute_Resultant_Force( Target_Point_info_struct  Target_Point_Attract,
                               Repulsion_component_struct Repulsion_component,
                               Resultant_Force_struct * Resultant_Force)
 {
-  Resultant_Force->Fsumz =  Target_Point_Attract.Fatz + Repulsion_component.Frerzz + Repulsion_component.Fatazz;
-  Resultant_Force->Fsumx =  Target_Point_Attract.Fatx + Repulsion_component.Frerxx + Repulsion_component.Fataxx;
+  double attract_angle_1,attract_angle_2,attract_angle_3;
+  
+  double Frerzz,Frerxx;
+  
+  //double Frerzz = 10,Frerxx = -1;
+  //double Frerzz=-1,Frerxx=10;
+  double repulsion_angle = atan2(Repulsion_component.Frerzz,Repulsion_component.Frerxx)/PI*180;//斥力角  
+  //double repulsion_angle = atan2(Frerzz,Frerxx)/PI * 180;//斥力角
+
+  double attract_angle = atan2(Target_Point_Attract.Fatz,Target_Point_Attract.Fatx)/PI*180;//引力角
+  //double attract_angle = 240;
+  
+  double repulsion = sqrt(pow(Repulsion_component.Frerzz,2) + pow(Repulsion_component.Frerxx,2));
+  //double repulsion = sqrt(pow(Frerzz,2) + pow(Frerxx,2));
+  repulsion_angle = ((int)repulsion_angle + 360) % 360 + repulsion_angle - (int)repulsion_angle;
+  attract_angle = ((int)attract_angle + 360) % 360 + attract_angle - (int)attract_angle;  
+  printf("斥力角 = %f 引力角 = %f\r\n",repulsion_angle,attract_angle);
+  //printf("Frerzz = %f Frerxx = %f\r\n", Repulsion_component.Frerzz, Repulsion_component.Frerxx);
+  //printf("Frerzz = %f Frerxx = %f\r\n", Frerzz, Frerxx);
+    
+  //attract_angle_0 = ((int)attract_angle + 0) % 360 + attract_angle - (int)attract_angle;
+  attract_angle_1 = ((int)attract_angle + 90) % 360 + attract_angle - (int)attract_angle;
+  attract_angle_2 = ((int)attract_angle + 180) % 360 + attract_angle - (int)attract_angle;
+  attract_angle_3 = ((int)attract_angle + 270) % 360 + attract_angle - (int)attract_angle;
+  
+  //printf("%f %f %f %f\r\n",attract_angle_0,attract_angle_1,attract_angle_2,attract_angle_3);
+  if(attract_angle >270 || attract_angle <90)
+  {
+    if(repulsion_angle < attract_angle_2 && repulsion_angle > attract_angle_1)
+    {
+      repulsion_angle = repulsion_angle - 90;
+      // printf("四\r\n"); 
+    }
+      
+    else if(repulsion_angle < attract_angle_3 && repulsion_angle > attract_angle_2)
+    {
+      repulsion_angle = repulsion_angle + 90;
+       //printf("三\r\n");
+    }  
+  }
+  else if(attract_angle > 90 && attract_angle <180)
+  {
+    if(repulsion_angle < attract_angle_2 && repulsion_angle > attract_angle_1)
+    {
+      repulsion_angle = repulsion_angle - 90;
+       //printf("四\r\n"); 
+    }
+      
+    else if(((repulsion_angle > 0)&&(repulsion_angle < attract_angle_3)) || ((repulsion_angle < 360)&&(repulsion_angle > attract_angle_2)))
+    {
+      repulsion_angle = repulsion_angle + 90;
+      // printf("三\r\n");
+    }   
+  }
+  else if(attract_angle < 270 && attract_angle > 180)
+  {
+    if(((repulsion_angle > 0)&&(repulsion_angle < attract_angle_2)) || ((repulsion_angle > attract_angle_1)&&(repulsion_angle < 360)))
+    {
+      repulsion_angle = repulsion_angle - 90;
+      // printf("四\r\n"); 
+    }
+      
+    else if(repulsion_angle < attract_angle_3 && repulsion_angle > attract_angle_2)
+    {
+      repulsion_angle = repulsion_angle + 90;
+       //printf("三\r\n");
+    }  
+  }
+  printf("斥力角 = %f\r\n",repulsion_angle);
+  Frerzz = repulsion * sin(repulsion_angle/180.0*PI);
+  Frerxx = repulsion * cos(repulsion_angle/180.0*PI);
+  //printf("Frerzz = %f Frerxx = %f\r\n", Frerzz,Frerxx);  
+  Resultant_Force->Fsumz = Target_Point_Attract.Fatz + Frerzz + Repulsion_component.Fatazz;
+  Resultant_Force->Fsumx = Target_Point_Attract.Fatx + Frerxx + Repulsion_component.Fataxx;
   Resultant_Force->Fsum = sqrt(pow(Resultant_Force ->Fsumz,2) + pow(Resultant_Force ->Fsumx,2));
+  printf("-------------------------------------------\r\n");
 #if car_info_printf
   printf("Fsumz = %f Fsumx = %f 合力大小 = %f\r\n", Resultant_Force->Fsumz, Resultant_Force->Fsumx, Resultant_Force->Fsum);
   //printf("-------------------------------------------\r\n");
@@ -430,12 +505,11 @@ void Compute_angle_and_vecitory(Resultant_Force_struct Resultant_Force,car_contr
 {
   car_controll->position_rad = atan2(Resultant_Force.Fsumz,Resultant_Force.Fsumx);
   car_controll->position_angle = car_controll->position_rad/PI*180;
-
-  //z轴的力代表旋转的速度，x轴代表车的线速度，再考虑
-  if(Resultant_Force.Fsum < 30 && Resultant_Force.Fsum > -30)
+  
+  if(Resultant_Force.Fsum < Max_speed && Resultant_Force.Fsum > -Max_speed)
     car_controll->speed = Resultant_Force.Fsum;
   else
-  car_controll->speed = 30;
+  car_controll->speed = Max_speed;
 }
 /*控制电机转动*/
 void robot_set_speed(car_controll_struct car_controll) {

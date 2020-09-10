@@ -1,4 +1,4 @@
-build/release/CMF.o: CMF.c \
+build/release/CFM_2.o: CFM_2.c \
  /usr/local/webots/include/controller/c/webots/motor.h \
  /usr/local/webots/include/controller/c/webots/types.h \
  /usr/local/webots/include/controller/c/webots/robot.h \
