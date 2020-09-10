@@ -1,10 +1,8 @@
-/*在CFM.c之上，
-针对避障速度缓慢（特别是对于墙的避障）参考论文，
-依据引力和斥力夹角，如果是钝角将斥力向引力方向旋转90度后计算合力，如果是锐角就不动。
-论文中说的好处是解决局部最小值，其实还能解决避障速度缓慢
-但是这样的处理过于粗暴，有一定的改善但是不够从好，不好在对于墙的避障，不能选择较好的转向
-（主要因为没有考虑到墙的大小，不是根据障碍大小决定朝哪转，而是通过与引力的夹角决定朝哪转，这是错误的）
- */
+/*在CFM_2.c之上，
+为了修正CFM_2在避障过程中存在双抖动路线（参考CFM第一象限实验环境），
+采用不论引力和斥力夹角是否为钝角，将斥力都向引力方向旋转90度后计算合力的避障策略，
+消除了双抖动，但是还是是通过与引力的夹角决定朝哪转，这个问题还是没解决
+ */ 
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,7 +32,7 @@ int obstruct_num=0;//障碍个数
 double Target_Point[1][2]={{-4,4*sqrt(3)}};//假设目标点
 
 double k = 5;//引力系数
-double m = 0.5;//斥力系数
+double m =2;//斥力系数
 double Po = 0.6;//斥力影响范围,要结合传感器探测距离变化,单位米
 double a = 0.5;//次方
 
@@ -415,7 +413,7 @@ void Compute_Resultant_Force( Target_Point_info_struct  Target_Point_Attract,
                               Repulsion_component_struct Repulsion_component,
                               Resultant_Force_struct * Resultant_Force)
 {
-  double attract_angle_1,attract_angle_2,attract_angle_3;
+  double attract_angle_0,attract_angle_2;
   
   double Frerzz,Frerxx;
   
@@ -435,21 +433,21 @@ void Compute_Resultant_Force( Target_Point_info_struct  Target_Point_Attract,
   //printf("Frerzz = %f Frerxx = %f\r\n", Repulsion_component.Frerzz, Repulsion_component.Frerxx);
   //printf("Frerzz = %f Frerxx = %f\r\n", Frerzz, Frerxx);
     
-  //attract_angle_0 = ((int)attract_angle + 0) % 360 + attract_angle - (int)attract_angle;
-  attract_angle_1 = ((int)attract_angle + 90) % 360 + attract_angle - (int)attract_angle;
+  attract_angle_0 = ((int)attract_angle + 0) % 360 + attract_angle - (int)attract_angle;
+  //attract_angle_1 = ((int)attract_angle + 90) % 360 + attract_angle - (int)attract_angle;
   attract_angle_2 = ((int)attract_angle + 180) % 360 + attract_angle - (int)attract_angle;
-  attract_angle_3 = ((int)attract_angle + 270) % 360 + attract_angle - (int)attract_angle;
+  //attract_angle_3 = ((int)attract_angle + 270) % 360 + attract_angle - (int)attract_angle;
   
   //printf("%f %f %f %f\r\n",attract_angle_0,attract_angle_1,attract_angle_2,attract_angle_3);
-  if(attract_angle >270 || attract_angle <90)
+  if(attract_angle >0 && attract_angle <90)
   {
-    if(repulsion_angle < attract_angle_2 && repulsion_angle > attract_angle_1)
+    if(((repulsion_angle < attract_angle_2) && (repulsion_angle > attract_angle_0)))
     {
       repulsion_angle = repulsion_angle - 90;
       // printf("四\r\n"); 
     }
       
-    else if(repulsion_angle < attract_angle_3 && repulsion_angle > attract_angle_2)
+    else if(((repulsion_angle < attract_angle_0) && (repulsion_angle > 0)) || ((repulsion_angle > attract_angle_2)&&(repulsion_angle < 360)))
     {
       repulsion_angle = repulsion_angle + 90;
        //printf("三\r\n");
@@ -457,13 +455,13 @@ void Compute_Resultant_Force( Target_Point_info_struct  Target_Point_Attract,
   }
   else if(attract_angle > 90 && attract_angle <180)
   {
-    if(repulsion_angle < attract_angle_2 && repulsion_angle > attract_angle_1)
+    if(repulsion_angle < attract_angle_2 && repulsion_angle > attract_angle_0)
     {
       repulsion_angle = repulsion_angle - 90;
        //printf("四\r\n"); 
     }
       
-    else if(((repulsion_angle > 0)&&(repulsion_angle < attract_angle_3)) || ((repulsion_angle < 360)&&(repulsion_angle > attract_angle_2)))
+    else if(((repulsion_angle > 0)&&(repulsion_angle < attract_angle_0)) || ((repulsion_angle < 360)&&(repulsion_angle > attract_angle_2)))
     {
       repulsion_angle = repulsion_angle + 90;
       // printf("三\r\n");
@@ -471,17 +469,31 @@ void Compute_Resultant_Force( Target_Point_info_struct  Target_Point_Attract,
   }
   else if(attract_angle < 270 && attract_angle > 180)
   {
-    if(((repulsion_angle > 0)&&(repulsion_angle < attract_angle_2)) || ((repulsion_angle > attract_angle_1)&&(repulsion_angle < 360)))
+    if(((repulsion_angle > attract_angle_0)&&(repulsion_angle < 360)) || ((repulsion_angle > 0)&&(repulsion_angle < attract_angle_2)))
     {
       repulsion_angle = repulsion_angle - 90;
       // printf("四\r\n"); 
     }
       
-    else if(repulsion_angle < attract_angle_3 && repulsion_angle > attract_angle_2)
+    else if(repulsion_angle < attract_angle_0 && repulsion_angle > attract_angle_2)
     {
       repulsion_angle = repulsion_angle + 90;
        //printf("三\r\n");
     }  
+  }
+  else if(attract_angle < 360 && attract_angle > 270)////////////////////////////////////////////
+  {
+      if(((repulsion_angle > attract_angle_0)&&(repulsion_angle < 360)) || ((repulsion_angle > 0)&&(repulsion_angle < attract_angle_2)))
+    {
+      repulsion_angle = repulsion_angle - 90;
+      // printf("四\r\n"); 
+    }
+      
+    else if(repulsion_angle < attract_angle_0 && repulsion_angle > attract_angle_2)
+    {
+      repulsion_angle = repulsion_angle + 90;
+       //printf("三\r\n");
+    }
   }
   printf("斥力角 = %f\r\n",repulsion_angle);
   Frerzz = repulsion * sin(repulsion_angle/180.0*PI);
