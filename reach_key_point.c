@@ -1,10 +1,5 @@
 /*
-在cfm的基础之上实现wfm
-但是将wfm的速度设置为20或者更快会崩溃，这主要是因为在转弯后没能即使i调整方向，
-再加上车速过快，导致墙超出了斥力范围导致
-解决办法：
-1.pid
-2.低通滤波器
+添加到达关键点后调整姿态的函数fix_direction
  */
 #include <math.h>
 #include <stdio.h>
@@ -20,20 +15,19 @@
 #define TIME_STEP 4
 
 //打印车辆信息的预条件编译
-#define car_info_printf 0
+#define car_info_printf 1
 //打印障碍信息的预条件编译
 #define obstruct_info_printf 1
 
 #define PI (4*atan(1))
 #define Max_speed 50
 #define TURN_COEFFICIENT 5.0
-#define WFM_speed 20
 #define Sensor_Data_Num 60//是90不是60是因为方便找波谷
 #define Virtual_Attract_Repulsion_Force_Angle 90
 WbDeviceTag wheels[4];
 
 int obstruct_num=0;//障碍个数
-double Target_Point[1][2]={{-4,4*sqrt(3)}};//假设目标点
+double Target_Point[1][2]={{-4,-4*sqrt(3)}};//假设目标点
 
 double k = 5;//引力系数
 double m = 0.2;//斥力系数
@@ -194,7 +188,7 @@ int main(int argc, char **argv) {
   {
     Resultant_Force.Fsumz = Virtual_Resultant_Force.Fatz*5;
     Resultant_Force.Fsumx =Virtual_Resultant_Force.Fatx*5;
-    Resultant_Force.Fsum = WFM_speed;
+    Resultant_Force.Fsum = 10;
     Resultant_Force.rad = Virtual_Resultant_Force.rad;
     Resultant_Force.angle = Virtual_Resultant_Force.angle;
 
@@ -217,10 +211,8 @@ void WFM(Repulsion_component_struct Repulsion_Force,Virtual_Resultant_component_
 
 if(Repulsion_Force.angle > 0)
   Virtual_Resultant_Force->angle = Repulsion_Force.angle - Virtual_Attract_Repulsion_Force_Angle;
-else if(Repulsion_Force.angle < 0)
-  Virtual_Resultant_Force->angle = Repulsion_Force.angle + Virtual_Attract_Repulsion_Force_Angle; 
 else
-  Virtual_Resultant_Force->angle =Attract_force.angle;
+  Virtual_Resultant_Force->angle = Repulsion_Force.angle + Virtual_Attract_Repulsion_Force_Angle; 
 Virtual_Resultant_Force->rad = Virtual_Resultant_Force->angle/180.0*PI;
 Virtual_Resultant_Force->Force = Repulsion_Force.Force;
 Virtual_Resultant_Force->Fatz = sin(Virtual_Resultant_Force->rad) * Virtual_Resultant_Force->Force;
