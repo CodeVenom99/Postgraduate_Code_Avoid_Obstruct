@@ -1,4 +1,4 @@
-build/release/reach_key_point.o: reach_key_point.c \
+build/release/WFM_pro.o: WFM_pro.c \
  /usr/local/webots/include/controller/c/webots/motor.h \
  /usr/local/webots/include/controller/c/webots/types.h \
  /usr/local/webots/include/controller/c/webots/robot.h \
