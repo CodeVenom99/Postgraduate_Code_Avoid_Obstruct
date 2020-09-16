@@ -1,4 +1,4 @@
-build/release/WFM_pro_2.o: WFM_pro_2.c \
+build/release/high_oscillatory.o: high_oscillatory.c \
  /usr/local/webots/include/controller/c/webots/motor.h \
  /usr/local/webots/include/controller/c/webots/types.h \
  /usr/local/webots/include/controller/c/webots/robot.h \
