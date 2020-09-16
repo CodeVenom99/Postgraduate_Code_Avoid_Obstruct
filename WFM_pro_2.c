@@ -1,11 +1,14 @@
 /*
 在cfm的基础之上实现wfm
-但是将wfm的速度设置为20或者更快会崩溃，这主要是因为在转弯后没能即使调整方向，
+但是将wfm的速度设置为20或者更快会崩溃，这主要是因为在转弯后没能即使i调整方向，
 再加上车速过快，导致墙超出了斥力范围导致
 解决办法：
 1.pid
 2.低通滤波器  x
-将速度设置为固定值
+3.动态斥力范围
+Resultant_Force.Fsum = 15*(1-fabs(cos(Repulsion_Force.rad)));
+cfm斥力范围0.6
+wfm斥力范围0.4
  */
 #include <math.h>
 #include <stdio.h>
@@ -21,7 +24,7 @@
 #define TIME_STEP 4
 
 //打印车辆信息的预条件编译
-#define car_info_printf 0
+#define car_info_printf 1
 //打印障碍信息的预条件编译
 #define obstruct_info_printf 1
 
@@ -36,7 +39,7 @@
 WbDeviceTag wheels[4];
 
 int obstruct_num=0;//障碍个数
-double Target_Point[1][2]={{-4,4*sqrt(3)}};//假设目标点
+double Target_Point[1][2]={{-4,-4*sqrt(3)}};//假设目标点
 
 double k = 5;//引力系数
 double m = 0.2;//斥力系数
@@ -180,16 +183,16 @@ int main(int argc, char **argv) {
     if(fabs(Attract_force.angle)>90.0)
     {
       WFM_Status = 1;
-
+      Po = 0.6;
       printf("进入wfm状态\r\n");
     }
   }
   else
   {
-    if(fabs(Attract_force.angle)<=90.0)
+    if(fabs(Attract_force.angle)<=90.0)//||Repulsion_Force.Force==0
     {
       WFM_Status = 0;
-
+      Po = 0.4;
       printf("进入cfm状态\r\n");
     }  
   }
@@ -197,7 +200,14 @@ int main(int argc, char **argv) {
   {
     Resultant_Force.Fsumz = Virtual_Resultant_Force.Fatz*5;
     Resultant_Force.Fsumx =Virtual_Resultant_Force.Fatx*5;
-    Resultant_Force.Fsum = WFM_speed;
+    //Resultant_Force.Fsum = WFM_speed;
+    
+    /**/
+    if(Repulsion_Force.rad==0||Repulsion_Force.rad==180)//
+      Resultant_Force.Fsum = 20;
+    else
+      Resultant_Force.Fsum = WFM_speed*(1-fabs(cos(Repulsion_Force.rad)));
+    
     Resultant_Force.rad = Virtual_Resultant_Force.rad;
     Resultant_Force.angle = Virtual_Resultant_Force.angle;
 
@@ -217,15 +227,18 @@ int main(int argc, char **argv) {
 
 void WFM(Repulsion_component_struct Repulsion_Force,Virtual_Resultant_component_Struct  * Virtual_Resultant_Force)
 {
-
+//double err;
 if(Repulsion_Force.angle > 0)
   Virtual_Resultant_Force->angle = Repulsion_Force.angle - Virtual_Attract_Repulsion_Force_Angle;
 else if(Repulsion_Force.angle < 0)
   Virtual_Resultant_Force->angle = Repulsion_Force.angle + Virtual_Attract_Repulsion_Force_Angle; 
 else
   Virtual_Resultant_Force->angle =Attract_force.angle;
-Virtual_Resultant_Force->rad = Virtual_Resultant_Force->angle/180.0*PI;
+  
 Virtual_Resultant_Force->Force = Repulsion_Force.Force;
+
+Virtual_Resultant_Force->rad = Virtual_Resultant_Force->angle/180.0*PI;
+
 Virtual_Resultant_Force->Fatz = sin(Virtual_Resultant_Force->rad) * Virtual_Resultant_Force->Force;
 Virtual_Resultant_Force->Fatx = cos(Virtual_Resultant_Force->rad) * Virtual_Resultant_Force->Force;
 #if car_info_printf
@@ -247,7 +260,7 @@ void Get_Distance(WbDeviceTag * sensors,sensor_data_struct * sensor_data)
     sensor_data[i].angle=6*i;
     sensor_data[i].rad = sensor_data[i].angle/180*PI+PI;
   } 
-  printf("%f\r\n",sensor_data[15].distance);
+  //printf("%f\r\n",sensor_data[15].distance);
 }
 /*
 该函数计算目标引力
