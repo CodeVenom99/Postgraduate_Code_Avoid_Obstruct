@@ -1,4 +1,4 @@
-build/release/high_oscillatory.o: high_oscillatory.c \
+build/release/WFM_pid.o: WFM_pid.c \
  /usr/local/webots/include/controller/c/webots/motor.h \
  /usr/local/webots/include/controller/c/webots/types.h \
  /usr/local/webots/include/controller/c/webots/robot.h \
