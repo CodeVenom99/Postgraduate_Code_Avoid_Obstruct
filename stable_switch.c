@@ -1,4 +1,7 @@
-/*在cfm的基础之上实现wfm
+/*
+在WFM_pro_2基础上添加状态切换时的消抖
+实验于communicate世界，对比WFM_pro_2
+代码只在car_1上测试，对比效果
  */
 #include <math.h>
 #include <stdio.h>
@@ -19,10 +22,10 @@
 #define obstruct_info_printf 1
 
 #define PI (4*atan(1))
-#define Max_speed 50
-#define TURN_COEFFICIENT 50.0
-#define KI 0.0
-#define KD 0.0
+#define TURN_COEFFICIENT 4.5
+
+#define Max_speed 20
+#define Object_speed 10
 #define WFM_speed 20
 #define Sensor_Data_Num 60//是90不是60是因为方便找波谷
 #define Virtual_Attract_Repulsion_Force_Angle 90
@@ -31,9 +34,9 @@ WbDeviceTag wheels[4];
 int obstruct_num=0;//障碍个数
 double Target_Point[1][2]={{-4,-4*sqrt(3)}};//假设目标点
 
-double k = 5;//引力系数
+double k = 10;//引力系数
 double m = 0.2;//斥力系数
-double Po = 0.6;//斥力影响范围,要结合传感器探测距离变化,单位米
+double Po = 0.4;//斥力影响范围,要结合传感器探测距离变化,单位米
 double a = 0.5;//次方
 
 typedef struct sensor_data_struct
@@ -55,12 +58,6 @@ double compass_rad;//罗盘弧度
 double compass_angle;
 double position_rad;//合力预期弧度
 double position_angle;
-double rad_error;
-double rad_integral;
-double rad_derivative;
-double rad_previous_error;
-double acc;
-
 }car_controll_struct;
 car_controll_struct car_controll;//小车控制结构体
 
@@ -127,14 +124,14 @@ void Compute_Repulsion(sensor_data_struct * sensor_data,int sensor_num,
 void CFM( Attract_component_struct  Attract_force,
                               Repulsion_component_struct Repulsion_Force,
                               Resultant_component_struct * Resultant_Force);//计算合力
-void Compute_angle_and_vecitory(Resultant_component_struct Resultant_Force,car_controll_struct * car_controll,int WFM_Status);//计算预期角度和速度
+void Compute_angle_and_vecitory(Resultant_component_struct Resultant_Force,car_controll_struct * car_controll);//计算预期角度和速度
 void fix_direction(double position_angle,const double *north ,car_controll_struct * car_controll);//到达关键点后达到姿态
 void robot_set_speed(car_controll_struct car_controll,WbDeviceTag * wheels);//车轮控制
 void WFM(Repulsion_component_struct Repulsion_Force,Virtual_Resultant_component_Struct * Virtual_Resultant_Force);                                               
 void State_switching(Attract_component_struct  Attract_force,Repulsion_component_struct Repulsion_Force);
 int main(int argc, char **argv) {
 
-  int i =0;
+  int i =0,switch_delay=0;
   int WFM_Status = 0;
   const double *gps_values; 
   const double *north;
@@ -162,14 +159,79 @@ int main(int argc, char **argv) {
   compass = wb_robot_get_device("compass");
   wb_gps_enable(gps, TIME_STEP);
   wb_compass_enable(compass, TIME_STEP);
+  i=0;
   while (1) {
-  wb_robot_step(4);
+  i++;
+  wb_robot_step(10);
   wb_pen_write(pen, 1);
   gps_values = wb_gps_get_values(gps);
   north = wb_compass_get_values(compass);
-  
-  fix_direction(0,north,&car_controll);
-  
+  Compute_Target_Attract(north,gps_values,k,&Attract_force);//计算目标点引力
+  Get_Distance(sensors,sensor_data);//采集一圈数据
+ 
+  Compute_Repulsion(sensor_data,Sensor_Data_Num,Attract_force,Po,m,a,&Repulsion_Force);//斥力
+  WFM(Repulsion_Force,&Virtual_Resultant_Force);
+  CFM(Attract_force,Repulsion_Force,&Resultant_Force);//合力
+/**/
+  if(WFM_Status == 0)
+  {
+    if(fabs(Attract_force.angle)>90.0)
+    {
+    switch_delay++;
+    if(switch_delay > 100)
+    {
+      WFM_Status = 1;
+      switch_delay = 0;
+      Po = 0.6;
+      if(strncmp(wb_robot_get_name(), "car_1", 5) == 0)
+         printf("car_1进入wfm状态,%d\r\n",i);       
+      else
+         printf("car_2进入wfm状态\r\n");
+    }    
+    }
+
+  }
+  else
+  {
+    if(fabs(Attract_force.angle)<=90.0)//||Repulsion_Force.Force==0
+    {
+    switch_delay++;
+    if(switch_delay>100)
+    {
+      WFM_Status = 0;
+      switch_delay = 0;
+      Po = 0.4;
+      if(strncmp(wb_robot_get_name(), "car_1", 5) == 0)
+         printf("car_1进入cfm状态,%d\r\n",i);       
+      else
+         printf("car_2进入cfm状态\r\n");    
+    }
+
+    }  
+  }
+  if(WFM_Status == 1)
+  {
+    Resultant_Force.Fsumz = Virtual_Resultant_Force.Fatz*5;
+    Resultant_Force.Fsumx =Virtual_Resultant_Force.Fatx*5;
+    //Resultant_Force.Fsum = WFM_speed;
+    
+    /**/
+    if(fabs(Repulsion_Force.angle)<10||fabs(Repulsion_Force.angle-180)<10)//
+      Resultant_Force.Fsum = 20;
+    else
+      Resultant_Force.Fsum = WFM_speed*(1-fabs(cos(Repulsion_Force.rad)));
+    
+    Resultant_Force.rad = Virtual_Resultant_Force.rad;
+    Resultant_Force.angle = Virtual_Resultant_Force.angle;
+
+  }
+
+  Compute_angle_and_vecitory(Resultant_Force,&car_controll);//预期速度，角度
+
+/*
+  car_controll.left_speed=5;
+  car_controll.right_speed=5; 
+  */ 
   robot_set_speed(car_controll,wheels);//电机控制
   };
   wb_robot_cleanup();
@@ -178,13 +240,18 @@ int main(int argc, char **argv) {
 
 void WFM(Repulsion_component_struct Repulsion_Force,Virtual_Resultant_component_Struct  * Virtual_Resultant_Force)
 {
-
+//double err;
 if(Repulsion_Force.angle > 0)
   Virtual_Resultant_Force->angle = Repulsion_Force.angle - Virtual_Attract_Repulsion_Force_Angle;
-else
+else if(Repulsion_Force.angle < 0)
   Virtual_Resultant_Force->angle = Repulsion_Force.angle + Virtual_Attract_Repulsion_Force_Angle; 
-Virtual_Resultant_Force->rad = Virtual_Resultant_Force->angle/180.0*PI;
+else
+  Virtual_Resultant_Force->angle =Attract_force.angle;
+  
 Virtual_Resultant_Force->Force = Repulsion_Force.Force;
+
+Virtual_Resultant_Force->rad = Virtual_Resultant_Force->angle/180.0*PI;
+
 Virtual_Resultant_Force->Fatz = sin(Virtual_Resultant_Force->rad) * Virtual_Resultant_Force->Force;
 Virtual_Resultant_Force->Fatx = cos(Virtual_Resultant_Force->rad) * Virtual_Resultant_Force->Force;
 #if car_info_printf
@@ -206,7 +273,7 @@ void Get_Distance(WbDeviceTag * sensors,sensor_data_struct * sensor_data)
     sensor_data[i].angle=6*i;
     sensor_data[i].rad = sensor_data[i].angle/180*PI+PI;
   } 
-  //printf("\r\n");
+  //printf("%f\r\n",sensor_data[15].distance);
 }
 /*
 该函数计算目标引力
@@ -360,11 +427,29 @@ void CFM( Attract_component_struct  Attract_force,
                               Repulsion_component_struct Repulsion_Force,
                               Resultant_component_struct * Resultant_Force)
 {
-  Resultant_Force->Fsumz =  Attract_force.Fatz + Repulsion_Force.Frerzz + Repulsion_Force.Fatazz;
-  Resultant_Force->Fsumx =  Attract_force.Fatx + Repulsion_Force.Frerxx + Repulsion_Force.Fataxx;
-  Resultant_Force->Fsum = sqrt(pow(Resultant_Force ->Fsumz,2) + pow(Resultant_Force ->Fsumx,2));
+  if(Repulsion_Force. Force==0)
+  {
+    Resultant_Force->Fsum =Max_speed;//没有斥力就保持最大速度
+    Resultant_Force->rad = Attract_force.rad;
+   Resultant_Force->angle = Attract_force.angle;
+  }
+  else
+  {
   Resultant_Force->rad = atan2(Resultant_Force->Fsumz,Resultant_Force->Fsumx);
   Resultant_Force->angle = Resultant_Force->rad/PI*180;
+  Resultant_Force->Fsumz =  Attract_force.Fatz + Repulsion_Force.Frerzz + Repulsion_Force.Fatazz;
+  Resultant_Force->Fsumx =  Attract_force.Fatx + Repulsion_Force.Frerxx + Repulsion_Force.Fataxx;
+  /*
+  if(fabs(Repulsion_Force.angle)<20||fabs(fabs(Repulsion_Force.angle)-180)<20)
+    Resultant_Force->Fsum =Object_speed;
+  else
+    Resultant_Force->Fsum = Max_speed*(1-fabs(cos(Repulsion_Force.rad)));
+  */
+  Resultant_Force->Fsum =Object_speed;
+
+
+  }
+
 #if car_info_printf
 
   printf("合力：  Force= %.2f , angle = %.2f , rad = %.2f, ", Resultant_Force->Fsum,Resultant_Force->angle,Resultant_Force->rad);
@@ -377,35 +462,25 @@ void CFM( Attract_component_struct  Attract_force,
 Position_Angle 预期角度
 speed_controll 左右轮速
 */
-void Compute_angle_and_vecitory(Resultant_component_struct Resultant_Force,car_controll_struct * car_controll,int WFM_Status)
+void Compute_angle_and_vecitory(Resultant_component_struct Resultant_Force,car_controll_struct * car_controll)
 {
   car_controll->position_rad = Resultant_Force.rad;
   car_controll->position_angle = Resultant_Force.angle;
-
+  
+  car_controll->speed = Resultant_Force.Fsum;
+/*
   if(fabs(Resultant_Force.Fsum) < Max_speed )
     car_controll->speed = Resultant_Force.Fsum;
   else if(Resultant_Force.Fsum < -Max_speed)
     car_controll->speed = -Max_speed;
   else
     car_controll->speed = Max_speed;
-  if(WFM_Status==1)
-  {
-  car_controll->rad_error = car_controll->position_rad;
-  car_controll->rad_integral = car_controll->rad_integral+car_controll->rad_error+car_controll->rad_previous_error;
-  car_controll->rad_derivative = car_controll->rad_error - car_controll->rad_previous_error;
-  car_controll->rad_previous_error =  car_controll->rad_error;
-  car_controll->acc = TURN_COEFFICIENT * car_controll->rad_error + KI * car_controll->rad_integral + KD * car_controll->rad_derivative;
-  car_controll->left_speed = car_controll->speed + car_controll->acc;
-  car_controll->right_speed = car_controll->speed - car_controll->acc;     
-  }  
-  else
-  {
+*/
+  //printf("angle = %d , rad = %f , min_distance = %f\r\n" ,sensor_data.angle , sensor_data.rad , sensor_data.min_distance);
   car_controll->left_speed = car_controll->speed + TURN_COEFFICIENT * car_controll->position_rad;
-  car_controll->right_speed = car_controll->speed - TURN_COEFFICIENT * car_controll->position_rad;    
-  }
-
+  car_controll->right_speed = car_controll->speed - TURN_COEFFICIENT * car_controll->position_rad; 
 #if car_info_printf
-  printf("车速：speed = %f , rad = %f , " ,car_controll->speed , car_controll->position_rad);
+  printf("车速：speed = %f , angle = %f , " ,car_controll->speed , car_controll->position_angle);
   printf("left_speed = %f , right_speed = %f\r\n" ,car_controll->left_speed , car_controll->right_speed);
   printf("-------------------------------------------\r\n");
 #endif
@@ -422,18 +497,12 @@ void fix_direction(double position_angle,const double *north ,car_controll_struc
 {
   car_controll->compass_rad = atan2(north[0], north[2]);
   car_controll->compass_angle = (car_controll->compass_rad - 1.5708) / PI * 180.0;
-  if (car_controll->compass_angle < -180.0)
+  if (car_controll->compass_angle < 0.0)
     car_controll->compass_angle = car_controll->compass_angle + 360.0;
-  car_controll->compass_rad = car_controll->compass_angle/180.0*PI;//指南针弧度,-pi~pi
-  printf("angle = %f \r\n" ,car_controll->compass_angle);
-  /**/
-  car_controll->rad_error = car_controll->compass_rad - position_angle;
-  car_controll->rad_integral = car_controll->rad_integral+car_controll->rad_error+car_controll->rad_previous_error;
-  car_controll->rad_derivative = car_controll->rad_error - car_controll->rad_previous_error;
-  car_controll->rad_previous_error =  car_controll->rad_error;
-  car_controll->acc = TURN_COEFFICIENT * car_controll->rad_error + KI * car_controll->rad_integral + KD * car_controll->rad_derivative;
-  car_controll->left_speed = 100 - car_controll->acc;
-  car_controll->right_speed = 100 + car_controll->acc;   
-  printf("left_speed = %f , right_speed = %f\r\n" ,car_controll->left_speed , car_controll->right_speed);  
+  car_controll->compass_rad = car_controll->compass_angle/180.0*PI;//指南针弧度,0～2pi
+  car_controll->compass_rad = (position_angle - car_controll->compass_angle)/180.0*PI;
+  
+  car_controll->left_speed = 0 + TURN_COEFFICIENT * car_controll->compass_rad;
+  car_controll->right_speed = 0 - TURN_COEFFICIENT * car_controll->compass_rad; 
 }
   

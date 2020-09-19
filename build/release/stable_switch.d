@@ -1,4 +1,4 @@
-build/release/WFM_pid.o: WFM_pid.c \
+build/release/stable_switch.o: stable_switch.c \
  /usr/local/webots/include/controller/c/webots/motor.h \
  /usr/local/webots/include/controller/c/webots/types.h \
  /usr/local/webots/include/controller/c/webots/robot.h \
