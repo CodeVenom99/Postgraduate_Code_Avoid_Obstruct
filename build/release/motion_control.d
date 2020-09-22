@@ -1,4 +1,4 @@
-build/release/receiver_emitter.o: receiver_emitter.c receiver_emitter.h \
+build/release/motion_control.o: motion_control.c motion_control.h \
  variable.h /usr/local/webots/include/controller/c/webots/motor.h \
  /usr/local/webots/include/controller/c/webots/types.h \
  /usr/local/webots/include/controller/c/webots/robot.h \
@@ -9,4 +9,5 @@ build/release/receiver_emitter.o: receiver_emitter.c receiver_emitter.h \
  /usr/local/webots/include/controller/c/webots/pen.h \
  /usr/local/webots/include/controller/c/webots/gps.h \
  /usr/local/webots/include/controller/c/webots/receiver.h \
- /usr/local/webots/include/controller/c/webots/emitter.h
+ /usr/local/webots/include/controller/c/webots/emitter.h cfm.h \
+ distance_detect.h wfm.h

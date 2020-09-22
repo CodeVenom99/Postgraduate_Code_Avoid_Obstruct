@@ -1,5 +1,5 @@
-build/release/receiver_emitter.o: receiver_emitter.c receiver_emitter.h \
- variable.h /usr/local/webots/include/controller/c/webots/motor.h \
+build/release/trm.o: trm.c trm.h variable.h \
+ /usr/local/webots/include/controller/c/webots/motor.h \
  /usr/local/webots/include/controller/c/webots/types.h \
  /usr/local/webots/include/controller/c/webots/robot.h \
  /usr/local/webots/include/controller/c/webots/nodes.h \
@@ -9,4 +9,5 @@ build/release/receiver_emitter.o: receiver_emitter.c receiver_emitter.h \
  /usr/local/webots/include/controller/c/webots/pen.h \
  /usr/local/webots/include/controller/c/webots/gps.h \
  /usr/local/webots/include/controller/c/webots/receiver.h \
- /usr/local/webots/include/controller/c/webots/emitter.h
+ /usr/local/webots/include/controller/c/webots/emitter.h \
+ receiver_emitter.h

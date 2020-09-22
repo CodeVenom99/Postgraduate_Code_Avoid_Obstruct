@@ -66,7 +66,8 @@
 ###-----------------------------------------------------------------------------
 
 ### Do not modify: this includes Webots global Makefile.include
-C_SOURCES = communication.c receiver_emitter.c
+C_SOURCES =  Traffic_rule.c receiver_emitter.c cfm.c wfm.c distance_detect.c motion_control.c device.c trm.c
+
 space :=
 space +=
 WEBOTS_HOME_PATH=$(subst $(space),\ ,$(strip $(subst \,/,$(WEBOTS_HOME))))
